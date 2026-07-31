@@ -13,6 +13,8 @@ export function CoordiForm({ onSubmit }: CoordiFormProps) {
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [locationError, setLocationError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [latInput, setLatInput] = useState('')
+  const [lonInput, setLonInput] = useState('')
   const [photos, setPhotos] = useState<File[]>([])
   const [previewUrls, setPreviewUrls] = useState<string[]>([])
 
@@ -54,6 +56,29 @@ export function CoordiForm({ onSubmit }: CoordiFormProps) {
     setLocationStatus('idle')
   }
 
+  const handleCoordsSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    const lat = Number(latInput)
+    const lon = Number(lonInput)
+    if (
+      latInput.trim() === '' ||
+      lonInput.trim() === '' ||
+      Number.isNaN(lat) ||
+      Number.isNaN(lon) ||
+      lat < -90 ||
+      lat > 90 ||
+      lon < -180 ||
+      lon > 180
+    ) {
+      setLocationStatus('error')
+      setLocationError('위도는 -90~90, 경도는 -180~180 범위의 숫자로 입력해주세요.')
+      return
+    }
+    setLocation({ type: 'coords', lat, lon })
+    setLocationStatus('idle')
+    setLocationError('')
+  }
+
   const handlePhotoChange = (e: ChangeEvent<HTMLInputElement>) => {
     setPhotos(e.target.files ? Array.from(e.target.files) : [])
   }
@@ -90,6 +115,29 @@ export function CoordiForm({ onSubmit }: CoordiFormProps) {
               />
               <Button type="submit" className="shrink-0">
                 검색
+              </Button>
+            </form>
+            <p className="text-xs text-muted-foreground">
+              지역명 검색은 아직 좌표로 변환되지 않아요. 아래에 위도/경도를 직접 입력해주세요.
+            </p>
+
+            <form onSubmit={handleCoordsSubmit} className="flex gap-2">
+              <Input
+                type="number"
+                step="any"
+                placeholder="위도 (예: 37.5665)"
+                value={latInput}
+                onChange={(e) => setLatInput(e.target.value)}
+              />
+              <Input
+                type="number"
+                step="any"
+                placeholder="경도 (예: 126.9780)"
+                value={lonInput}
+                onChange={(e) => setLonInput(e.target.value)}
+              />
+              <Button type="submit" variant="secondary" className="shrink-0">
+                좌표 적용
               </Button>
             </form>
 

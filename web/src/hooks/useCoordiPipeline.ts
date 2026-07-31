@@ -35,7 +35,7 @@ export function useCoordiPipeline(userId: string | null) {
           ...INITIAL_STATE,
           stage: 'error',
           error:
-            '좌표가 없어요. "현재 위치 사용" 버튼으로 위치를 먼저 가져와주세요. (지역명 검색은 아직 좌표 변환 기능이 연결되지 않았어요)',
+            '좌표가 없어요. "현재 위치 사용" 버튼을 누르거나 위도/경도를 직접 입력해주세요. (지역명 검색은 아직 좌표 변환 기능이 연결되지 않았어요)',
         })
         return
       }

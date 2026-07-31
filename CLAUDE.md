@@ -25,7 +25,7 @@ npm run lint      # oxlint
 ### 프론트엔드 (`web/`)
 - React + Vite + TypeScript. Tailwind CSS v4(`@tailwindcss/vite` 플러그인)와 shadcn/ui(`src/components/ui/*`) 사용, 경로 별칭 `@/*` → `src/*`.
 - `src/App.tsx` — 로그인 게이트 + "코디 추천"/"히스토리" 탭 전환.
-- `src/components/CoordiForm.tsx` — 위치 입력(현재 위치 Geolocation 또는 지역명 검색) + 옷 사진 업로드(선택) + 추천 버튼. 지역명 검색은 아직 좌표로 변환되지 않으므로(Geocoding 미연동) 현재 위치 버튼으로만 실제 파이프라인이 동작한다.
+- `src/components/CoordiForm.tsx` — 위치 입력(현재 위치 Geolocation, 지역명 검색, 위도/경도 직접 입력) + 옷 사진 업로드(선택) + 추천 버튼. 지역명 검색은 아직 좌표로 변환되지 않으므로(Geocoding 미연동) 현재 위치 버튼 또는 위도/경도 직접 입력으로만 실제 파이프라인이 동작한다.
 - `src/components/CoordiResultPanel.tsx` — 파이프라인 진행 단계 표시 + 완료 후 결과(이미지/문장/체크리스트) 반응형 레이아웃.
 - `src/components/AuthPanel.tsx` — 이메일/비밀번호 로그인·회원가입.
 - `src/components/HistoryPanel.tsx` — 로그인한 사용자의 과거 추천 기록 조회.
