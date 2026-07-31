@@ -2,37 +2,61 @@
 
 이 파일은 이 저장소에서 코드 작업을 할 때 Claude Code(claude.ai/code)에게 제공하는 가이드입니다.
 
-## 프로젝트 현황
+## 프로젝트 개요
 
-이 저장소는 현재 기획 문서만 존재하며, 애플리케이션 코드나 패키지 매니페스트, 빌드 도구는 아직 없습니다. `PRD.md`가 (`날씨요정단_PRD.docx`에서 정리된) 신뢰할 수 있는 제품 스펙 문서이며, 아키텍처를 추론할 소스 코드가 없으므로 구현을 시작하기 전에 반드시 읽어야 합니다.
+날씨요정단 — 위치 하나만 입력하면 코디 추천(문장 + 예시 이미지)과 준비물(우산/양산/마스크) 추천을 함께 보여주는 앱. Supabase Auth로 로그인하면 추천 기록이 히스토리로 남는다. 제품 스펙의 근거는 `PRD.md` 참고.
 
-코드/툴체인이 아직 구성되지 않았기 때문에 빌드, 린트, 테스트 명령어도 아직 없습니다. 구현이 시작되면 이 파일에 실제 명령어를 채워 넣어야 합니다.
+## 자주 쓰는 명령어
 
-## 이 프로젝트는 무엇인가
+프론트엔드는 `web/` 디렉토리에 있다. 모든 npm 명령은 이 디렉토리 안에서 실행한다.
 
-날씨요정단 ("Weather Fairy Squad") — 위치 하나만 입력하면 한 화면에서 아래 두 가지를 함께 보여주는 앱입니다.
+```bash
+cd web
+npm install       # 의존성 설치
+npm run dev       # 개발 서버 (기본 http://localhost:5173)
+npm run build     # tsc -b && vite build — 타입체크 + 프로덕션 빌드
+npm run lint      # oxlint
+```
 
-1. **코디 추천**: 기온·체감온도·습도·날씨상태를 바탕으로 한 문장짜리 옷차림 추천(예: "얇은 니트 + 바람막이, 우산 챙기세요")과, 그 코디에 어울리는 AI 생성 예시 이미지.
-2. **준비물 추천**: 강수확률·자외선지수·미세먼지(PM2.5/PM10)를 바탕으로 우산/양산/마스크 필요 여부를 보여주는 체크리스트.
+테스트 스위트는 없다. 기능 변경 후 검증은 실제 dev 서버를 띄우고 Playwright(headless Chromium)로 브라우저를 구동해 스크린샷/콘솔 로그로 확인하는 방식을 써왔다 (`scratchpad/pw-test/` 참고 스크립트들, 세션마다 위치가 바뀌므로 매번 새로 작성).
 
-자세한 내용은 `PRD.md`의 3번(핵심 기능), 4번(처리 흐름) 섹션 참고.
+## 아키텍처
 
-## 의도된 아키텍처 (PRD.md 4번 섹션 기준)
+### 프론트엔드 (`web/`)
+- React + Vite + TypeScript. Tailwind CSS v4(`@tailwindcss/vite` 플러그인)와 shadcn/ui(`src/components/ui/*`) 사용, 경로 별칭 `@/*` → `src/*`.
+- `src/App.tsx` — 로그인 게이트 + "코디 추천"/"히스토리" 탭 전환.
+- `src/components/CoordiForm.tsx` — 위치 입력(현재 위치 Geolocation 또는 지역명 검색) + 옷 사진 업로드(선택) + 추천 버튼. 지역명 검색은 아직 좌표로 변환되지 않으므로(Geocoding 미연동) 현재 위치 버튼으로만 실제 파이프라인이 동작한다.
+- `src/components/CoordiResultPanel.tsx` — 파이프라인 진행 단계 표시 + 완료 후 결과(이미지/문장/체크리스트) 반응형 레이아웃.
+- `src/components/AuthPanel.tsx` — 이메일/비밀번호 로그인·회원가입.
+- `src/components/HistoryPanel.tsx` — 로그인한 사용자의 과거 추천 기록 조회.
+- `src/hooks/useCoordiPipeline.ts` — 위치 → 날씨 → AI 추천 → 이미지 생성 → (로그인 시) 히스토리 저장까지 이어지는 상태 머신. 이미지 생성 실패는 전체 실패로 취급하지 않고 텍스트만으로 `done` 처리한다.
+- `src/hooks/useSession.ts` — Supabase Auth 세션 구독.
+- `src/lib/weather.ts` / `src/lib/ai.ts` / `src/lib/image.ts` — 각각 Supabase Edge Function(`weather`, `coordi-recommendation`, `outfit-image`)을 호출하는 얇은 클라이언트. 실제 외부 API 로직은 여기 없고 Edge Function 쪽에 있다.
+- `src/lib/supabase.ts` — Edge Function 호출 공용 헬퍼(`callEdgeFunction`), Authorization/apikey 헤더를 anon key로 채운다.
+- `src/lib/supabaseClient.ts` — 인증/DB용 `@supabase/supabase-js` 클라이언트.
+- `src/lib/history.ts` — `coordi_history` 테이블 insert/select.
 
-계획된 요청 흐름은 독립적으로 호출 가능한 서비스 모음이 아니라 순차적인 파이프라인입니다.
+### 백엔드 (`supabase/functions/`)
+Python이 아니라 **Deno(TypeScript) Edge Function**이다. 각 폴더의 `index.ts`가 진입점.
 
-1. 사용자가 위치(현재 위치 또는 검색한 지역명)를 입력한다.
-2. **OpenWeatherMap Geocoding API** — 지역명 → 위도/경도 변환.
-3. **OpenWeatherMap One Call API 3.0** — 2번의 좌표를 사용해 기온, 체감온도, 습도, 날씨상태, 자외선지수, 강수확률 조회.
-4. **OpenWeatherMap Air Pollution API** — 같은 좌표를 사용해 PM2.5/PM10 조회.
-5. 3~4번의 날씨 데이터를 LLM에 전달해 옷차림 추천 문장과 준비물 체크리스트를 함께 생성한다(별도로 튜닝된 두 번의 호출이 아님).
-6. 5번에서 생성된 옷차림 추천 문장을 **Google Gemini 이미지 생성 API**에 전달해 예시 코디 이미지를 생성한다.
-7. UI는 코디 이미지 + 추천 문장 + 준비물 체크리스트를 하나의 결과로 함께 렌더링한다.
+- `weather/` — OpenWeatherMap 무료 엔드포인트(Current Weather, 5 Day/3 Hour Forecast, UV Index, Air Pollution)를 조합 호출. One Call API 3.0은 유료 구독이 필요해 의도적으로 쓰지 않는다. UV Index 엔드포인트가 실패해도 0으로 대체하고 나머지 데이터는 정상 반환한다.
+- `coordi-recommendation/` — Gemini 텍스트 모델(`gemini-3.1-flash-lite`)에 날씨 데이터를 전달해 코디 문장 + 준비물 체크리스트(우산/양산/마스크 각각의 필요 여부와 근거)를 구조화된 JSON(`responseSchema`)으로 생성.
+- `outfit-image/` — 코디 문장을 Gemini 이미지 모델(`gemini-2.5-flash-image`)에 전달해 예시 이미지를 base64 data URL로 생성. 무료 티어는 이 모델 할당량이 0이라 결제 계정이 없으면 항상 실패하는 게 정상이며, 클라이언트가 이를 감안해 텍스트만으로 폴백한다.
+- 세 함수 모두 `Deno.env.get('OPENWEATHER_API_KEY')` / `Deno.env.get('GEMINI_API_KEY')`로 시크릿을 읽는다. **`VITE_` 접두사를 붙이면 안 된다** — 그건 프론트엔드 전용 규칙이고 Edge Function과는 무관하다. 시크릿은 Supabase 대시보드의 `/functions/secrets`(`https://supabase.com/dashboard/project/<project-ref>/functions/secrets`)에서 관리하며, MCP에는 시크릿을 읽거나 쓰는 도구가 없으므로 사용자가 직접 등록해야 한다.
+- Edge Function 배포는 로컬 Supabase CLI 없이 `mcp__supabase__deploy_edge_function` MCP 도구로 한다 (project_id: 아래 참고). 로컬 `supabase/functions/*/index.ts`를 수정한 뒤 반드시 이 도구로 재배포해야 실제로 반영된다 — 파일만 고치고 배포를 안 하면 아무 효과가 없다.
 
-핵심 포인트: 3번과 4번은 모두 2번의 좌표에 의존하므로 병렬로 실행 가능하다. 반면 6번은 원본 날씨 데이터가 아니라 5번의 *출력 텍스트*에 의존하므로, 이미지 생성 호출은 반드시 텍스트 생성 호출이 끝난 후에 이루어져야 한다.
+### Supabase 프로젝트
+- project_id / ref: `wagbfziuoxbtmvcnibsf` (서울 리전). 이 저장소 전용 프로젝트가 아니라 다른 실습(학생/도서/게시판 등)과 공유하는 프로젝트이므로, 테이블/함수 이름이 겹치지 않게 주의하고 다른 테이블은 건드리지 않는다.
+- `coordi_history` 테이블 — 사용자별 추천 기록(위치 좌표, 날씨 JSON, 코디 문장, 체크리스트 JSON, 이미지 data URL, 생성 시각). RLS로 `auth.uid() = user_id`인 행만 조회/삽입/수정/삭제 가능.
+- Auth는 이메일 확인(email confirmation) 없이 가입 즉시 세션이 생성되도록 설정되어 있다(테스트가 쉬움).
 
-## 제약사항 (PRD.md 6번 섹션 기준)
+## 환경 변수
 
-- 사용자의 실제 옷 사진은 절대 사용하지 않는다 — 옷차림 판단과 생성 이미지는 오직 날씨 데이터로부터만 도출되어야 한다.
-- OpenWeatherMap과 Gemini API 키는 환경변수로만 읽어와야 하며, 절대 하드코딩하지 않는다.
-- 하루 완성이 목표인 미니 프로젝트다. 이미지 생성이 너무 어렵다면 텍스트만으로(코디 문장 + 준비물 체크리스트, 이미지 없음) 완성으로 인정되는 결과물도 허용된다 — 이미지 단계 때문에 핵심 기능 구현이 막히지 않도록 한다.
+- `web/.env` (git에서 제외됨, `web/.env.example` 참고): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`만 있으면 된다. OpenWeatherMap/Gemini 키는 클라이언트에 절대 두지 않는다.
+- Supabase Edge Function 시크릿 (대시보드에서만 관리): `OPENWEATHER_API_KEY`, `GEMINI_API_KEY`.
+
+## 알아두면 좋은 함정
+
+- shadcn/ui는 `@base-ui/react` 기반이라 Radix 기반 예제 코드와 API가 다를 수 있다 (`Button`, `Input` 등은 `src/components/ui/`에 이미 있는 것을 그대로 쓰면 됨).
+- Tailwind v4라 `tailwind.config.js`가 없다 — 커스터마이즈는 `src/index.css`의 `@theme`/`:root` 변수로 한다.
+- `tsconfig.json`/`tsconfig.app.json`에 `baseUrl`을 쓰면 안 된다(이 프로젝트의 TypeScript 버전에서 deprecated 에러 발생) — `paths`만으로 `@/*` alias가 동작한다.
