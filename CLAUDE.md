@@ -41,8 +41,8 @@ Python이 아니라 **Deno(TypeScript) Edge Function**이다. 각 폴더의 `ind
 
 - `weather/` — OpenWeatherMap 무료 엔드포인트(Current Weather, 5 Day/3 Hour Forecast, UV Index, Air Pollution)를 조합 호출. One Call API 3.0은 유료 구독이 필요해 의도적으로 쓰지 않는다. UV Index 엔드포인트가 실패해도 0으로 대체하고 나머지 데이터는 정상 반환한다.
 - `coordi-recommendation/` — Gemini 텍스트 모델(`gemini-3.1-flash-lite`)에 날씨 데이터를 전달해 코디 문장 + 준비물 체크리스트(우산/양산/마스크 각각의 필요 여부와 근거)를 구조화된 JSON(`responseSchema`)으로 생성.
-- `outfit-image/` — 코디 문장을 Gemini 이미지 모델(`gemini-2.5-flash-image`)에 전달해 예시 이미지를 base64 data URL로 생성. 무료 티어는 이 모델 할당량이 0이라 결제 계정이 없으면 항상 실패하는 게 정상이며, 클라이언트가 이를 감안해 텍스트만으로 폴백한다.
-- 세 함수 모두 `Deno.env.get('OPENWEATHER_API_KEY')` / `Deno.env.get('GEMINI_API_KEY')`로 시크릿을 읽는다. **`VITE_` 접두사를 붙이면 안 된다** — 그건 프론트엔드 전용 규칙이고 Edge Function과는 무관하다. 시크릿은 Supabase 대시보드의 `/functions/secrets`(`https://supabase.com/dashboard/project/<project-ref>/functions/secrets`)에서 관리하며, MCP에는 시크릿을 읽거나 쓰는 도구가 없으므로 사용자가 직접 등록해야 한다.
+- `outfit-image/` — 코디 문장을 **Pollinations.ai**(`https://image.pollinations.ai/prompt/...`)에 GET으로 요청해 예시 이미지를 base64 data URL로 생성. API 키가 필요 없는 무료 서비스다. Gemini의 이미지 출력 모델(`gemini-*-image`, Imagen 계열 전부 포함)은 무료 티어 할당량이 0이라 결제 계정 없이는 원천적으로 호출 불가능해서 대체했다 — 다른 Gemini 이미지 모델로 바꿔봐도 소용없다. 클라이언트는 이미지 생성 실패 시 텍스트만으로 폴백하도록 이미 구현되어 있다.
+- 세 함수 중 `weather`, `coordi-recommendation`은 `Deno.env.get('OPENWEATHER_API_KEY')` / `Deno.env.get('GEMINI_API_KEY')`로 시크릿을 읽는다(`outfit-image`는 키가 필요 없음). **`VITE_` 접두사를 붙이면 안 된다** — 그건 프론트엔드 전용 규칙이고 Edge Function과는 무관하다. 시크릿은 Supabase 대시보드의 `/functions/secrets`(`https://supabase.com/dashboard/project/<project-ref>/functions/secrets`)에서 관리하며, MCP에는 시크릿을 읽거나 쓰는 도구가 없으므로 사용자가 직접 등록해야 한다.
 - Edge Function 배포는 로컬 Supabase CLI 없이 `mcp__supabase__deploy_edge_function` MCP 도구로 한다 (project_id: 아래 참고). 로컬 `supabase/functions/*/index.ts`를 수정한 뒤 반드시 이 도구로 재배포해야 실제로 반영된다 — 파일만 고치고 배포를 안 하면 아무 효과가 없다.
 
 ### Supabase 프로젝트

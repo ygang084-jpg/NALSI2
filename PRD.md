@@ -54,7 +54,7 @@
 2. "오늘의 코디 추천" 버튼 클릭 한 번으로 아래 전체 파이프라인이 순차 실행된다.
 3. 브라우저는 Supabase Edge Function `weather`를 호출한다. 이 함수가 서버 쪽에서 OpenWeatherMap 무료 엔드포인트(Current Weather, 5 Day/3 Hour Forecast, UV Index, Air Pollution)를 조합 호출해 기온·체감온도·습도·날씨상태·자외선지수·강수확률·미세먼지(PM2.5/PM10)를 반환한다.
 4. 브라우저는 Supabase Edge Function `coordi-recommendation`을 호출한다. 이 함수가 날씨 데이터를 Gemini 텍스트 모델에 전달해 코디 추천 문장과 준비물 체크리스트(근거 포함)를 함께 생성해 반환한다.
-5. 브라우저는 Supabase Edge Function `outfit-image`를 호출한다. 이 함수가 4번에서 생성된 코디 문장을 Gemini 이미지 생성 모델에 전달해 예시 이미지를 생성해 반환한다. 실패해도 파이프라인은 멈추지 않고 텍스트 결과만으로 다음 단계로 진행한다.
+5. 브라우저는 Supabase Edge Function `outfit-image`를 호출한다. 이 함수가 4번에서 생성된 코디 문장을 이미지 생성 서비스(Pollinations.ai)에 전달해 예시 이미지를 생성해 반환한다. 실패해도 파이프라인은 멈추지 않고 텍스트 결과만으로 다음 단계로 진행한다.
 6. 최종적으로 코디 이미지(있는 경우)·추천 문장·준비물 리스트를 한 화면에 표시한다.
 7. 로그인 상태라면 위 결과를 `coordi_history` 테이블에 저장하고, 히스토리 탭에서 다시 조회할 수 있다.
 
@@ -67,7 +67,7 @@
 - **OpenWeatherMap UV Index API** (무료, 일부 키에서 미제공 시 0으로 대체): 자외선지수
 - **OpenWeatherMap Air Pollution API** (무료): 미세먼지 PM2.5/PM10
 - **Google Gemini 텍스트 생성 API** (`gemini-3.1-flash-lite`): 코디 추천 문장 + 준비물 체크리스트 생성
-- **Google Gemini 이미지 생성 API** (`gemini-2.5-flash-image`): 코디 추천 문장 기반 예시 이미지 생성 (결제 계정 없이는 무료 할당량이 0이라 실패할 수 있음 — 실패 시 텍스트만으로 결과 제공)
+- **Pollinations.ai 이미지 생성 API** (무료, API 키 불필요): 코디 추천 문장 기반 예시 이미지 생성. 원래는 Gemini 이미지 생성 모델을 쓰려 했으나, Gemini의 이미지 출력 모델은 전부 무료 티어 할당량이 0이라 결제 계정 없이는 사용이 불가능해 대체했다
 - **Supabase Edge Functions**: 위 모든 외부 API 키를 서버 쪽에 숨기는 프록시 (`weather`, `coordi-recommendation`, `outfit-image`)
 - **Supabase Auth**: 이메일/비밀번호 로그인
 - **Supabase Database**: `coordi_history` 테이블에 사용자별 추천 기록 저장 (RLS로 본인 데이터만 조회/수정 가능)
@@ -77,9 +77,9 @@
 ## 6. 제약 사항
 
 - 사용자의 실제 옷 사진은 사용하지 않는다 — 순수하게 날씨 데이터만으로 코디를 판단하는 구조. 업로드한 사진은 화면 표시/모드 전환에만 쓰이고 AI에는 전달되지 않는다.
-- API 키(OpenWeatherMap, Gemini)는 하드코딩하지 않고 Supabase Edge Function 시크릿(서버 환경변수)으로 관리한다. 클라이언트에는 Supabase 프로젝트 URL과 anon key만 노출된다.
+- API 키(OpenWeatherMap, Gemini)는 하드코딩하지 않고 Supabase Edge Function 시크릿(서버 환경변수)으로 관리한다. 클라이언트에는 Supabase 프로젝트 URL과 anon key만 노출된다. 이미지 생성(Pollinations.ai)은 API 키 자체가 필요 없다.
 - 하루 완성이 목표인 미니 프로젝트이므로, 이미지 생성이 어려울 경우 이미지 없이 텍스트(코디 문장 + 준비물 리스트)만으로도 완성으로 인정한다.
-- 결제(구독/카드 등록) 없이 동작해야 한다 — OpenWeatherMap은 무료 엔드포인트만 사용하고, Gemini 이미지 생성이 무료 할당량 부족으로 실패해도 전체 흐름이 막히지 않아야 한다.
+- 결제(구독/카드 등록) 없이 동작해야 한다 — OpenWeatherMap은 무료 엔드포인트만, 이미지 생성은 결제가 필요 없는 Pollinations.ai를 사용해 전체 파이프라인이 결제 없이 끝까지 동작한다.
 - RLS(Row Level Security)로 `coordi_history`는 본인 소유 행만 조회·수정·삭제 가능하다.
 
 ## 7. 오늘의 완성 기준 (Done의 정의)

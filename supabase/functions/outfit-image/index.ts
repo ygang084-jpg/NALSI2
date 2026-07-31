@@ -1,4 +1,5 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
+import { encodeBase64 } from 'jsr:@std/encoding/base64'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -6,12 +7,13 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-const IMAGE_MODEL = 'gemini-2.5-flash-image'
-const IMAGE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL}:generateContent`
+// Google's Gemini/Imagen image models all require a billing-enabled account
+// (free tier quota is 0 for every image-output model). Pollinations.ai needs
+// no API key and has no billing requirement, so we use it instead.
+const POLLINATIONS_URL = 'https://image.pollinations.ai/prompt'
 
 function buildImagePrompt(outfitSentence: string): string {
-  return `다음 옷차림 추천 문장에 어울리는 예시 코디 이미지를 만들어주세요: "${outfitSentence}"
-스타일: 옷만 깔끔하게 배치한 플랫레이(flat lay) 사진처럼 밝고 단순한 배경으로 그려주세요. 실제 사람 얼굴이나 특정 인물은 등장시키지 마세요.`
+  return `flat lay product photography, clothing only, no person, no human, no face, no model wearing it, plain white background: ${outfitSentence}`
 }
 
 function jsonResponse(body: unknown, status = 200) {
@@ -27,43 +29,25 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const apiKey = Deno.env.get('GEMINI_API_KEY')
-    if (!apiKey) {
-      return jsonResponse(
-        { error: 'Gemini API 키가 서버에 설정되지 않았어요. Supabase 프로젝트에 GEMINI_API_KEY 시크릿을 추가해주세요.' },
-        500,
-      )
-    }
-
     const { outfitSentence } = await req.json()
     if (!outfitSentence) {
       return jsonResponse({ error: 'outfitSentence가 필요해요.' }, 400)
     }
 
-    const response = await fetch(`${IMAGE_URL}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: buildImagePrompt(outfitSentence) }] }],
-      }),
-    })
+    const prompt = buildImagePrompt(outfitSentence)
+    const url = `${POLLINATIONS_URL}/${encodeURIComponent(prompt)}?width=512&height=512&nologo=true`
 
+    const response = await fetch(url)
     if (!response.ok) {
       const body = await response.text().catch(() => '')
-      throw new Error(`Gemini 이미지 생성 요청이 실패했어요 (${response.status} ${response.statusText}) ${body}`.trim())
+      throw new Error(`이미지 생성 요청이 실패했어요 (${response.status} ${response.statusText}) ${body}`.trim())
     }
 
-    const data = await response.json()
-    const parts: Array<{ inlineData?: { mimeType: string; data: string } }> =
-      data.candidates?.[0]?.content?.parts ?? []
-    const imagePart = parts.find((part) => part.inlineData)
+    const contentType = response.headers.get('content-type') ?? 'image/jpeg'
+    const buffer = new Uint8Array(await response.arrayBuffer())
+    const base64 = encodeBase64(buffer)
 
-    if (!imagePart?.inlineData) {
-      throw new Error('Gemini 응답에서 이미지를 찾지 못했어요.')
-    }
-
-    const dataUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`
-    return jsonResponse({ dataUrl })
+    return jsonResponse({ dataUrl: `data:${contentType};base64,${base64}` })
   } catch (err) {
     return jsonResponse({ error: err instanceof Error ? err.message : String(err) }, 502)
   }
